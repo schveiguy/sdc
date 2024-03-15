@@ -1,6 +1,8 @@
 module d.gc.dmdapi;
 
 import d.gc.tcache;
+import d.gc.spec;
+import d.gc.slab;
 
 extern(C):
 
@@ -61,16 +63,16 @@ struct BlkInfo
 // TODO: handle finalizer
 BlkInfo __sd_gc_druntime_qalloc(size_t size, uint bits, void *finalizer)
 {
-    bool hasPointers = (bits & BlkAttr.NO_SCAN) ? false : true;
+    bool hasPointers = (bits & BlkAttr.NO_SCAN) == 0;
     // note, we don't use sdc's appending mechanism for now, but we want to
     // keep the bit relevant
-    bool appendable = (bits & BlkAttr.APPENDABLE) ? true : false;
+    bool appendable = (bits & BlkAttr.APPENDABLE) != 0;
 
     BlkInfo result;
 
     // all the rest are ignored for now.
     if(appendable)
-        result.base = threadCache.allocAppendable(size, hasPointers, finalizer);
+        result.base = threadCache.allocAppendable(size, hasPointers, cast(Finalizer)finalizer);
     else
         result.base = threadCache.alloc(size, hasPointers);
 
@@ -80,12 +82,12 @@ BlkInfo __sd_gc_druntime_qalloc(size_t size, uint bits, void *finalizer)
         {
             // figure out the capacity, set it to max, and then use that size
             // for the caller.
-            auto cap = threadCache.getCapacity(ptr[0 .. size]);
+            auto cap = threadCache.getCapacity(result.base[0 .. size]);
             if(cap == 0)
                 result.size = size;
             else
             {
-                assert(threadCache.extend(ptr[0 .. size], cap - size));
+                assert(threadCache.extend(result.base[0 .. size], cap - size));
                 result.size = cap;
             }
         }
@@ -117,9 +119,9 @@ BlkInfo __sd_gc_druntime_allocInfo(void *ptr)
     if(pd.isSlab())
     {
         auto si = SlabAllocInfo(pd, ptr);
-        result.base = si.address;
+        result.base = cast(void*)si.address;
         result.size = si.usedCapacity;
-        if(si.hasMetadata())
+        if(si.hasMetadata)
         {
             result.attr |= BlkAttr.APPENDABLE;
         }
