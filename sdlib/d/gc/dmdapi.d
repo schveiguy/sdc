@@ -72,9 +72,9 @@ BlkInfo __sd_gc_druntime_qalloc(size_t size, uint bits, void *finalizer)
 
     // all the rest are ignored for now.
     if(appendable)
-        result.base = threadCache.allocAppendable(size, hasPointers, cast(Finalizer)finalizer);
+        result.base = threadCache.allocAppendable(size, hasPointers, hasPointers, cast(Finalizer)finalizer);
     else
-        result.base = threadCache.alloc(size, hasPointers);
+        result.base = threadCache.alloc(size, hasPointers, hasPointers);
 
     if(result.base)
     {
