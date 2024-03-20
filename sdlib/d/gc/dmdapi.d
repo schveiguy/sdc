@@ -10,6 +10,12 @@ extern(C):
  * Druntime hooks
  */
 
+// initializer for the threadcache
+extern(C) void __sd_gc_thread_init() {
+	import d.gc.tcache, d.gc.emap, d.gc.base;
+	threadCache.initialize(&gExtentMap, &gBase);
+}
+
 // copied from druntime, to see what the bits mean.
 enum BlkAttr : uint
 {
@@ -58,17 +64,18 @@ struct BlkInfo
     uint   attr;
 }
 
-
-
 // TODO: handle finalizer
-BlkInfo __sd_gc_druntime_qalloc(size_t size, uint bits, void *finalizer)
+// BlkInfo __sd_gc_druntime_qalloc(size_t size, uint bits, void *finalizer)
+void __sd_gc_druntime_qalloc(BlkInfo* result, size_t size, uint bits, void *finalizer)
 {
+    //import core.stdc.stdio;
+    //printf("In sdc qalloc, size is %d\n", cast(int)size);
     bool hasPointers = (bits & BlkAttr.NO_SCAN) == 0;
     // note, we don't use sdc's appending mechanism for now, but we want to
     // keep the bit relevant
     bool appendable = (bits & BlkAttr.APPENDABLE) != 0;
 
-    BlkInfo result;
+    //BlkInfo result;
 
     // all the rest are ignored for now.
     if(appendable)
@@ -76,6 +83,7 @@ BlkInfo __sd_gc_druntime_qalloc(size_t size, uint bits, void *finalizer)
     else
         result.base = threadCache.alloc(size, hasPointers, hasPointers);
 
+    printf("returning pointer %p\n", result.base);
     if(result.base)
     {
         if(appendable)
@@ -108,7 +116,7 @@ BlkInfo __sd_gc_druntime_qalloc(size_t size, uint bits, void *finalizer)
         }
     }
     result.attr = bits & (BlkAttr.APPENDABLE | BlkAttr.NO_SCAN);
-    return result;
+    //return result;
 }
 
 BlkInfo __sd_gc_druntime_allocInfo(void *ptr)

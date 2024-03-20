@@ -7,7 +7,7 @@ extern(C):
 /**
  * Standard C allocating functions.
  */
-void* malloc(size_t size) {
+/+void* malloc(size_t size) {
 	return threadCache.alloc(size, true, false);
 }
 
@@ -21,7 +21,7 @@ void* calloc(size_t nmemb, size_t size) {
 
 void* realloc(void* ptr, size_t size) {
 	return threadCache.realloc(ptr, size, true);
-}
+}+/
 
 /**
  * SDC runtime API.
