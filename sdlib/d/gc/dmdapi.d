@@ -68,8 +68,6 @@ struct BlkInfo
 // BlkInfo __sd_gc_druntime_qalloc(size_t size, uint bits, void *finalizer)
 void __sd_gc_druntime_qalloc(BlkInfo* result, size_t size, uint bits, void *finalizer)
 {
-    //import core.stdc.stdio;
-    //printf("In sdc qalloc, size is %d\n", cast(int)size);
     bool hasPointers = (bits & BlkAttr.NO_SCAN) == 0;
     // note, we don't use sdc's appending mechanism for now, but we want to
     // keep the bit relevant
@@ -83,7 +81,6 @@ void __sd_gc_druntime_qalloc(BlkInfo* result, size_t size, uint bits, void *fina
     else
         result.base = threadCache.alloc(size, hasPointers, hasPointers);
 
-    printf("returning pointer %p\n", result.base);
     if(result.base)
     {
         if(appendable)

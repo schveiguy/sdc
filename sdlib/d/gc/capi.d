@@ -2,7 +2,7 @@ module d.gc.capi;
 
 import d.gc.tcache;
 
-extern(C):
+extern(C) nothrow:
 
 /**
  * Standard C allocating functions.
