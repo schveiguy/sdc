@@ -80,19 +80,14 @@ private:
 		assert(mutex.isHeld(), "Mutex not held!");
 
 		foreach (ref range; roots) {
-			if (range.length == 0) {
-				// range is actually just a root pointer. We need to pass in
-				// the pointer itself as an array, but cannot use the stack for
-				// this.
-				static struct Array {
-					size_t length;
-					void* ptr;
-				}
-
-				Array* arr = cast(Array*) &range;
-				scan((&arr.ptr)[0 .. 1]);
-			} else
+			// if the range length is 0, this means that the range is really a
+			// pointer to a root. However, this is scanned as part of the global
+			// segment, since *this very struct* is contained within a root
+			// range. This means it will find the roots array, and scan that as
+			// well. Therefore, we only need to scan ranges that are non-empty.
+			if (range.length > 0) {
 				scan(range);
+			}
 		}
 	}
 }

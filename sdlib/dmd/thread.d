@@ -24,15 +24,21 @@ void thread_scanAll_C(ScanDg* context, typeof(&__sd_scanAllThreadsFn) scan);
 
 // sdrt API.
 void __sd_thread_scan(ScanDg scan) {
-	import d.rt.stack;
-	__sd_stack_scan(scan);
+	// we do nothing here, because this is called from each *scanner* thread.
+	// All the stack/tls is added from the global scan call from druntime.
 }
 
 void __sd_global_scan(ScanDg scan) {
+	import d.gc.global;
+	// scan all registered roots and ranges.
+	gState.scanRoots(scan);
+
+	// this actually scans the thread stacks, registers, and TLS.
 	thread_scanAll_C(&scan, &__sd_scanAllThreadsFn);
 }
 
 void __sd_thread_stop_the_world() {
+	// this stops all other threads, and registers the stacks to be scanned.
 	thread_suspendAll();
 }
 
