@@ -39,6 +39,12 @@ extern(C) int pthread_create(pthread_t* thread, const pthread_attr_t* attr,
 
 private:
 
+extern(C) void __sd_thread_create();
+extern(C) void __sd_thread_destroy();
+
+extern(C) void __sd_gc_thread_enter_busy_state();
+extern(C) void __sd_gc_thread_exit_busy_state();
+
 struct ThreadRunner {
 	void* arg;
 	void* function(void*) fun;
