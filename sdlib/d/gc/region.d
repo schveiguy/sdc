@@ -108,6 +108,9 @@ public:
 	}
 
 	bool checkBlockThreshold() shared {
+		import core.stdc.stdio;
+		if (nBlocks >= blockThreshold)
+			printf("===== nblocks of %ld exceeded threshold of %ld\n", nBlocks, blockThreshold);
 		return nBlocks >= blockThreshold;
 	}
 
@@ -115,6 +118,8 @@ public:
 	void setBlockThreshold(int targetNum, int targetDen) shared {
 		blockThreshold = max(nBlocks * targetNum / targetDen,
 		                     minAutomaticBlockThresholdCollect);
+		import core.stdc.stdio;
+		printf("===== After running GC, blocks are %ld, threshold is now %ld\n", nBlocks, blockThreshold);
 	}
 
 private:

@@ -197,21 +197,27 @@ private:
 	void addRootsImpl(const void[] range) {
 		assert(mutex.isHeld(), "Mutex not held!");
 
+		import d.gc.range;
+		const(void*)[] trueRange = cast(void*[])range;
+		if(range.length != 0)
+			trueRange = makeRange(range);
+		if(trueRange.ptr is null) return;
+
+		// We realloc everytime. It doesn't really matter at this point.
 		auto ptr = cast(void*) roots.ptr;
 		auto index = roots.length;
 		auto length = index + 1;
-
-		// We realloc everytime. It doesn't really matter at this point.
 		import d.gc.tcache;
 		ptr = threadCache.realloc(ptr, length * void*[].sizeof, true);
 		roots = (cast(const(void*)[]*) ptr)[0 .. length];
+		roots[index] = trueRange;
 
-		import d.gc.range;
+		/*import d.gc.range;
 		if (range.length == 0) {
 			roots[index] = cast(void*[]) range;
 		} else {
 			roots[index] = makeRange(range);
-		}
+		}*/
 	}
 
 	void removeRootsImpl(const void* ptr) {
@@ -225,7 +231,7 @@ private:
 		 * Search in reverse, since it's most likely for things to be removed
 		 * in the reverse order they were added.
 		 */
-		foreach_reverse (i; 0 .. roots.length) {
+		foreach (i; 0 .. roots.length) {
 			if (cast(void*) roots[i].ptr is ptr
 				    || cast(void*) roots[i].ptr is alignedPtr) {
 				auto length = roots.length - 1;

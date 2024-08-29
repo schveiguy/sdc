@@ -531,9 +531,11 @@ private:
 		scope(exit) {
 			// Set the block thresholds for the next collection to
 			// be 2x current block allocations.
-			gPointerRegionAllocator.setBlockThreshold(2, 1);
-			gDataRegionAllocator.setBlockThreshold(2, 1);
+			gPointerRegionAllocator.setBlockThreshold(3, 2);
+			gDataRegionAllocator.setBlockThreshold(3, 2);
 			gState.endGCCycle();
+			import core.stdc.stdio;
+			printf("===== root count is %ld\n", gState.roots.length);
 		}
 
 		import d.thread;
@@ -554,9 +556,6 @@ private:
 		import d.gc.scanner;
 		shared(Scanner) scanner = Scanner(gcCycle, managedAddressSpace);
 
-		// Go on and on until all worklists are empty.
-		scanner.mark();
-
 		/**
 		 * We might have allocated, and therefore refilled the bin
 		 * during the collection process. As a result, slots in the
@@ -567,6 +566,11 @@ private:
 		 * 
 		 * Alternatively, we could make sure the slots are marked.
 		 */
+		flushCache();
+
+		// Go on and on until all worklists are empty.
+		scanner.mark();
+
 		flushCache();
 
 		collect(gcCycle);
