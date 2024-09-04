@@ -231,7 +231,7 @@ private:
 		 * Search in reverse, since it's most likely for things to be removed
 		 * in the reverse order they were added.
 		 */
-		foreach (i; 0 .. roots.length) {
+		foreach_reverse (i; 0 .. roots.length) {
 			if (cast(void*) roots[i].ptr is ptr
 				    || cast(void*) roots[i].ptr is alignedPtr) {
 				auto length = roots.length - 1;
