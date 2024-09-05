@@ -46,6 +46,7 @@ shared(RegionAllocator)* gPointerRegionAllocator() {
 	return &regionAllocator;
 }
 
+// start at 8 blocks (40mb) before automatic collection.
 enum MinimumBlockCollectThreshold = 8;
 
 struct RegionAllocator {
@@ -68,8 +69,7 @@ private:
 	// Count of blocks that are currently acquired.
 	size_t nBlocks = 0;
 
-	// start at 20 blocks (40mb) before automatic collection.
-	size_t blockThreshold = minAutomaticBlockThresholdCollect;
+	size_t blockThreshold = MinimumBlockCollectThreshold;
 
 public:
 	bool acquire(void** addrPtr, uint extraBlocks = 0) shared {
@@ -117,7 +117,7 @@ public:
 	// should be float target
 	void setBlockThreshold(int targetNum, int targetDen) shared {
 		blockThreshold = max(nBlocks * targetNum / targetDen,
-		                     minAutomaticBlockThresholdCollect);
+		                     MinimumBlockCollectThreshold);
 		import core.stdc.stdio;
 		printf("===== After running GC, blocks are %ld, threshold is now %ld\n", nBlocks, blockThreshold);
 	}
