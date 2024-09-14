@@ -32,20 +32,12 @@ void* __sd_gc_alloc(size_t size) {
 	return threadCache.alloc(size, true, false);
 }
 
-void* __sd_gc_alloc_no_pointers(size_t size) {
-	return threadCache.alloc(size, false, false);
-}
-
 void* __sd_gc_array_alloc(size_t size) {
 	return __sd_gc_alloc(size);
 }
 
 void* __sd_gc_alloc_finalizer(size_t size, void* finalizer) {
 	return threadCache.allocAppendable(size, true, false, finalizer);
-}
-
-void* __sd_gc_alloc_finalizer_no_pointers(size_t size, void* finalizer) {
-	return threadCache.allocAppendable(size, false, false, finalizer);
 }
 
 void __sd_gc_free(void* ptr) {
