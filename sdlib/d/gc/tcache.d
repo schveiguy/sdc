@@ -126,8 +126,7 @@ public:
 			return allocSmall(size, containsPointers, zero);
 		}
 
-		auto pages = getPageCount(size);
-		return allocLarge(pages, containsPointers, zero);
+		return allocLarge(size, containsPointers, zero);
 	}
 
 	void* allocAppendable(size_t size, bool containsPointers, bool zero,
@@ -154,8 +153,7 @@ public:
 			return ptr;
 		}
 
-		auto pages = getPageCount(size);
-		auto ptr = allocLarge(pages, containsPointers, zero);
+		auto ptr = allocLarge(size, containsPointers, zero);
 		if (unlikely(ptr is null)) {
 			return null;
 		}
@@ -324,6 +322,9 @@ private:
 
 		if (unlikely(zero)) {
 			memset(ptr, 0, slotSize);
+		} else if (containsPointers) {
+			// Zero out the non-allocated part of the slot to avoid stale pointers.
+			memset(ptr + size, 0, slotSize - size);
 		}
 
 		triggerAllocationEvent(slotSize);
@@ -396,10 +397,10 @@ private:
 	/**
 	 * Large allocations.
 	 */
-	void* allocLarge(uint pages, bool containsPointers, bool zero) {
+	void* allocLarge(size_t size, bool containsPointers, bool zero) {
 		// We are about to allocate, make room for it if needed.
 		maybeRunGCCycle();
-
+		auto pages = getPageCount(size);
 		void* ptr;
 
 		{
@@ -412,6 +413,10 @@ private:
 
 		if (unlikely(ptr is null)) {
 			return null;
+		}
+
+		if (containsPointers && !zero) {
+			memset(ptr + size, 0, pages * PageSize - size);
 		}
 
 		triggerAllocationEvent(pages * PageSize);
