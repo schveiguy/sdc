@@ -80,8 +80,11 @@ private:
 	ThreadBinState[ThreadBinCount] binStates;
 
 public:
-	void initialize(shared(ExtentMap)* emap, shared(Base)* base) {
+	void initialize(shared(ExtentMap)* emap, shared(Base)* base,
+	                bool enableGC) {
 		self = pthread_self();
+
+		disableGC = !enableGC;
 
 		nextAllocationEvent = DefaultEventWait;
 		nextDeallocationEvent = DefaultEventWait;
@@ -757,7 +760,7 @@ unittest nonAllocatableSizes {
 
 unittest trackAllocatedBytes {
 	ThreadCache tc;
-	tc.initialize(&gExtentMap, &gBase);
+	tc.initialize(&gExtentMap, &gBase, false);
 
 	size_t expected = 0;
 
@@ -813,7 +816,7 @@ unittest zero {
 	enum SmallSize = 8;
 
 	ThreadCache tc;
-	tc.initialize(&gExtentMap, &gBase);
+	tc.initialize(&gExtentMap, &gBase, false);
 
 	// Make sure we leave things in a clean state.
 	scope(exit) {
@@ -918,7 +921,7 @@ unittest zero {
 
 unittest queryAllocInfos {
 	ThreadCache tc;
-	tc.initialize(&gExtentMap, &gBase);
+	tc.initialize(&gExtentMap, &gBase, false);
 
 	// Make sure we leave things in a clean state.
 	scope(exit) {
@@ -1058,7 +1061,8 @@ unittest queryAllocInfos {
 
 unittest realloc {
 	ThreadCache tc;
-	tc.initialize(&gExtentMap, &gBase);
+	tc.initialize(&gExtentMap, &gBase, false);
+	tc.disableGC = true;
 
 	size_t allocated = 0;
 	size_t deallocated = 0;
@@ -1135,7 +1139,7 @@ unittest realloc {
 
 unittest extendSmall {
 	ThreadCache tc;
-	tc.initialize(&gExtentMap, &gBase);
+	tc.initialize(&gExtentMap, &gBase, false);
 
 	// Make sure we leave things in a clean state.
 	scope(exit) {
@@ -1243,7 +1247,7 @@ unittest extendSmall {
 
 unittest extendLarge {
 	ThreadCache tc;
-	tc.initialize(&gExtentMap, &gBase);
+	tc.initialize(&gExtentMap, &gBase, false);
 
 	size_t allocated = 0;
 	size_t deallocated = 0;
@@ -1393,7 +1397,7 @@ unittest extendLarge {
 
 unittest arraySpill {
 	ThreadCache tc;
-	tc.initialize(&gExtentMap, &gBase);
+	tc.initialize(&gExtentMap, &gBase, false);
 
 	// Make sure we leave things in a clean state.
 	scope(exit) {
@@ -1488,7 +1492,7 @@ unittest arraySpill {
 
 unittest finalization {
 	ThreadCache tc;
-	tc.initialize(&gExtentMap, &gBase);
+	tc.initialize(&gExtentMap, &gBase, false);
 
 	// Make sure we leave things in a clean state.
 	scope(exit) {

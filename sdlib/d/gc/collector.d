@@ -133,6 +133,7 @@ private:
 		collector.runGCCycleLocked();
 
 		target = updateTargetPageCount();
+
 		return true;
 	}
 
