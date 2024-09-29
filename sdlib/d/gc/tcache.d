@@ -450,22 +450,8 @@ private:
 
 		if (allocated >= nextAllocationEvent) {
 			recycleNextBin();
-			// check for triggering an automatic collection
-			checkAutomaticCollection();
 
 			nextAllocationEvent = allocated + DefaultEventWait;
-		}
-	}
-
-	/**
-	 * Check whether we should run an automatic collection, and if so, run
-	 * it.
-	 */
-	void checkAutomaticCollection() {
-		import d.gc.region;
-		if (gPointerRegionAllocator.checkBlockThreshold()
-			    || gDataRegionAllocator.checkBlockThreshold()) {
-			this.runGCCycle();
 		}
 	}
 
