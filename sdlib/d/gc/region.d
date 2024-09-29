@@ -46,7 +46,7 @@ shared(RegionAllocator)* gPointerRegionAllocator() {
 	return &regionAllocator;
 }
 
-//enum MinimumBlockCollectThreshold = 8;
+enum MinimumBlockCollectThreshold = 8;
 
 struct RegionAllocator {
 private:
