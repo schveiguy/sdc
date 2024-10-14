@@ -362,6 +362,10 @@ private:
 		if (unlikely(zero)) {
 			memset(ptr, 0, slotSize);
 		}
+		else if (containsPointers) {
+			// clear out any data that was not requested
+			memset(ptr + size, 0, slotSize - size);
+		}
 
 		triggerAllocationEvent(slotSize);
 		return ptr;
