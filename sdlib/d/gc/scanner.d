@@ -8,10 +8,58 @@ import d.gc.range;
 import d.gc.spec;
 import d.gc.util;
 
+// opaque structure
+struct pthread_mutex_t {
+	ubyte[64] _data;
+}
+
+struct pthread_cond_t {
+	ubyte[64] _data;
+}
+
+extern(C) int pthread_mutex_init(pthread_mutex_t* mutex, void *attr = null);
+extern(C) int pthread_cond_init(pthread_cond_t* cond, void *attr = null);
+
+extern(C) int pthread_mutex_lock(shared pthread_mutex_t* mutex);
+extern(C) int pthread_mutex_unlock(shared pthread_mutex_t* mutex);
+extern(C) int pthread_cond_wait(pthread_cond_t* cond, pthread_mutex_t* mutex);
+extern(C) int pthread_cond_signal(pthread_cond_t* cond);
+extern(C) int pthread_cond_broadcast(pthread_cond_t* cond);
+
+struct PTCond {
+	pthread_mutex_t mutex;
+	pthread_cond_t cond;
+	void initialize() {
+		pthread_mutex_init(&mutex);
+		pthread_cond_init(&cond);
+	}
+
+	void lock() shared {
+		pthread_mutex_lock(&mutex);
+	}
+
+	void unlock() shared {
+		pthread_mutex_unlock(&mutex);
+	}
+
+	void wait() {
+		pthread_cond_wait(&cond, &mutex);
+	}
+
+	void notify() {
+		pthread_cond_signal(&cond);
+	}
+
+	void notifyAll() {
+		pthread_cond_broadcast(&cond);
+	}
+}
+
 struct Scanner {
 private:
 	import d.sync.mutex;
-	Mutex mutex;
+	//Mutex mutex;
+	PTCond cond;
 
 	uint activeThreads;
 	uint cursor;
@@ -26,6 +74,8 @@ public:
 
 		this._gcCycle = gcCycle;
 		this._managedAddressSpace = managedAddressSpace;
+
+		this.cond.initialize();
 	}
 
 	this(ubyte gcCycle, AddressRange managedAddressSpace) {
@@ -83,8 +133,8 @@ public:
 	}
 
 	void addToWorkList(const(void*)[][] ranges) shared {
-		mutex.lock();
-		scope(exit) mutex.unlock();
+		cond.lock();
+		scope(exit) cond.unlock();
 
 		(cast(Scanner*) &this).addToWorkListImpl(ranges);
 	}
@@ -123,8 +173,8 @@ private:
 	}
 
 	bool waitForWork(ref Worker worker) shared {
-		mutex.lock();
-		scope(exit) mutex.unlock();
+		cond.lock();
+		scope(exit) cond.unlock();
 
 		activeThreads--;
 
@@ -141,9 +191,13 @@ private:
 		}
 
 		auto w = (cast(Scanner*) &this);
-		mutex.waitFor(w.hasWork);
+		while(!hasWork(w)) {
+			w.cond.wait();
+		}
 
 		if (w.cursor == 0) {
+			// no more work for any threads.
+			w.cond.notifyAll();
 			return false;
 		}
 
@@ -155,11 +209,16 @@ private:
 		w.cursor = start;
 		worker.refill(w.worklist[start .. stop]);
 
+		if(w.cursor != 0) {
+			// still more work to hand out
+			w.cond.notify();
+		}
+
 		return true;
 	}
 
 	void ensureWorklistCapacity(size_t count) {
-		assert(mutex.isHeld(), "mutex not held!");
+		//assert(mutex.isHeld(), "mutex not held!");
 		assert(count < uint.max, "Cannot reserve this much capacity!");
 
 		if (likely(count <= worklist.length)) {
@@ -183,7 +242,7 @@ private:
 	}
 
 	void addToWorkListImpl(const(void*)[][] ranges) {
-		assert(mutex.isHeld(), "mutex not held!");
+		//assert(mutex.isHeld(), "mutex not held!");
 		assert(0 < ranges.length && ranges.length < uint.max,
 		       "Invalid ranges count!");
 
@@ -194,6 +253,7 @@ private:
 			assert(r.length > 0, "Cannot add empty range to the worklist!");
 			worklist[cursor++] = r;
 		}
+		cond.notify(); // there is now work to do
 	}
 }
 
