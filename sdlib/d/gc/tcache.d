@@ -151,8 +151,16 @@ public:
 	}
 
 	void destroyThread() {
-		free(tlsSegments.ptr);
-		flushCache();
+		// The suspend hook may also try to free. Avoid the race
+		// condition.
+		state.enterBusyState();
+		scope(exit) state.exitBusyState();
+		if (tlsSegments.ptr !is null) {
+			free(tlsSegments.ptr);
+			tlsSegments = [];
+		}
+
+		flushCacheImpl();
 	}
 
 	void* alloc(size_t size, bool containsPointers, bool zero) {
@@ -339,12 +347,16 @@ public:
 		state.enterBusyState();
 		scope(exit) state.exitBusyState();
 
+		flushCacheImpl();
+	}
+
+private:
+	void flushCacheImpl() {
 		foreach (ref b; bins) {
 			b.fullFlush(emap);
 		}
 	}
 
-private:
 	/**
 	 * Small allocations.
 	 */
