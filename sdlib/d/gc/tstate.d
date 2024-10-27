@@ -78,11 +78,12 @@ public:
 
 	bool onSuspendSignal() {
 		// Sets the status to Delayed no matter what.
-		auto s = state.fetchAdd(1);
+		auto s = state.load();
 		assert(status(s) == SuspendState.Signaled);
 
 		// The thread is busy, put it to sleep!
 		if (s != SignaledState) {
+			state.fetchAdd(1);
 			return false;
 		}
 
@@ -129,7 +130,7 @@ package:
 	void markSuspended() {
 		// The status to delayed because of the fetchAdd in onSuspendSignal.
 		auto s = state.load();
-		assert(s == DelayedState || s == MustSuspendState);
+		assert(s == SignaledState || s == MustSuspendState);
 
 		state.store(SuspendedState);
 	}

@@ -364,13 +364,17 @@ private:
 			return null;
 		}
 
+		auto pd = getPageDescriptor(ptr);
+		auto si = SlabAllocInfo(pd, ptr);
+		assert(pd.extent.slabData.valueAt(si.index));
+
 		if (unlikely(zero)) {
 			memset(ptr, 0, slotSize);
 		}
-		else if (containsPointers) {
+		/*else if (containsPointers) {
 			// clear out any data that was not requested
 			memset(ptr + size, 0, slotSize - size);
-		}
+		}*/
 
 		triggerAllocationEvent(slotSize);
 		return ptr;
@@ -425,9 +429,14 @@ private:
 		triggerDeallocationEvent(slotSize);
 
 		// If the allocation contains pointers, zero it before freeing it
-		if (ShouldZeroFreeSlabs && pd.containsPointers) {
+		/*if (ShouldZeroFreeSlabs && pd.containsPointers) {
 			memset(ptr, 0, slotSize);
-		}
+		}*/
+		// put in a sentinel pattern to make things break quicker.
+		memset(ptr, 0xa3, slotSize);
+		auto si = SlabAllocInfo(pd, ptr);
+		if(si.hasMetadata)
+			pd.extent.disableMetadata(si.index);
 
 		auto index = getBinIndex(sc, pd.containsPointers);
 		auto bin = &bins[index];
@@ -479,6 +488,8 @@ private:
 
 		auto e = pd.extent;
 		auto npages = e.npages;
+		// write in a pattern to make things break quicker.
+		memset(e.address, 0xa1, e.size);
 
 		{
 			state.enterBusyState();

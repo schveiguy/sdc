@@ -4,6 +4,23 @@ import d.gc.capi;
 import d.gc.tcache;
 import d.gc.tstate;
 import d.gc.types;
+import d.gc.spec;
+
+void pthreadMessage(const char* msg, size_t p) {
+	import core.stdc.stdio;
+	char[128] buf;
+	auto len = snprintf(buf.ptr, buf.length, msg, p);
+	stderrSafeMessage(buf.ptr[0 .. len]);
+}
+
+void stderrSafeMessage(const(char)[] msg) {
+	import d.gc.tcache;
+	char[256] buf;
+	import core.stdc.unistd, core.stdc.stdio;
+	auto len = snprintf(buf.ptr, buf.length, "MESSAGE %p: %.*s\n", threadCache.self, cast(int)msg.length, msg.ptr);
+	write(STDERR_FILENO, buf.ptr, len);
+}
+
 
 void createProcess() {
 	enterBusyState();
@@ -260,6 +277,7 @@ private:
 			if (count > 32 && ss == SuspendState.Signaled) {
 				import d.gc.proc;
 				if (isDetached(tc.tid)) {
+					pthreadMessage("Detaching pthread %p", tc.self);
 					tc.state.detach();
 					continue;
 				}
@@ -353,6 +371,131 @@ private:
 				scan(makeRange(tc.stackTop, tc.stackBottom));
 			}
 		}
+	}
+}
+
+void printFullGraph() {
+	// ignore any locks, we are printing this from a child process that has no other threads.
+	import d.gc.global;
+	import core.stdc.stdio;
+	static void printMemoryPointers(const(void*)[] range)
+	{
+		foreach(p; range)
+		{
+			import d.gc.rtree;
+			if(!isValidAddress(p)) continue;
+			auto pd = threadCache.maybeGetPageDescriptor(p);
+			auto e = pd.extent;
+			if(e)
+			{
+				printf(" R:%p", p);
+				if(pd.isSlab()) {
+					import d.gc.slab;
+					auto si = SlabAllocInfo(pd, p);
+					printf(" (S%d:%p)", si.slotSize, si._address);
+				}
+				else {
+					auto npages = e.npages;
+					printf(" (L%lld:%p)", npages * PageSize, e.address);
+				}
+			}
+		}
+	}
+	auto roots = (cast(GCState*)&gState).roots;
+	foreach(r; roots)
+	{
+		printf("Root: %p - %p (%lld)", r.ptr, r.ptr + r.length, r.length * PointerSize);
+		printMemoryPointers(r);
+		printf("\n");
+	}
+
+	auto emap = &threadCache.emap;
+	auto cycle = gState.cycle.load();
+
+	// now print all the allocated blocks
+	import d.gc.arena;
+	import d.gc.block;
+	static void processBlocks(ref AllBlockRing blocks, bool hasPointers) {
+		for(auto r = blocks.range; !r.empty; r.popFront())
+		{
+			auto block = r.front;
+			auto bem = emap.blockLookup(block.address);
+			uint i = 0;
+			while(i < PagesInBlock) {
+				i = block.nextAllocatedPage(i);
+				if(i >= PagesInBlock) {
+					break;
+				}
+
+				auto pd = bem.lookup(i);
+				auto e = pd.extent;
+				if(e is null) {
+					// probably GC metadata
+					++i;
+					continue;
+				}
+				i += e.npages;
+				if(e.isSlab())
+				{
+					auto ec = pd.extentClass;
+					auto sc = ec.sizeClass;
+
+					import d.gc.sizeclass;
+					ulong* bmp;
+					ulong sparseMarks;
+					if (ec.supportsInlineMarking) {
+						if(ec.dense)
+							bmp = cast(ulong*) &e.slabMetadataMarks;
+						else {
+							auto ecycle = e.gcWord.load();
+							bmp = &sparseMarks;
+							if((ecycle & 0xff) == cycle)
+								sparseMarks = ecycle >> 8;
+							else
+								sparseMarks = 0;
+						}
+					} else {
+						bmp = e.outlineMarksBuffer;
+					}
+
+					import d.gc.slab;
+					int slotSize = binInfos[sc].slotSize;
+					foreach(idx; 0 .. e.nslots){
+						auto addr = e.address + idx * slotSize;
+						int marked = (bmp[idx / 64] >> (i % 64)) & 1;
+						int live = e.slabData.valueAt(idx) ? 1 : 0;
+						printf("Alloc: S%d:%p V:%d M:%d", slotSize, addr, live, marked);
+						if(live && hasPointers)
+							printMemoryPointers(cast(const(void*)[])addr[0 .. slotSize]);
+						printf("\n");
+					}
+				}
+				else
+				{
+					auto ecycle = e.gcWord.load();
+					auto marked = ecycle == cycle;
+					auto size = e.size;
+					auto addr = e.address;
+					printf("Alloc: L%d:%p V:1 M:%d", size, addr, marked);
+					if(hasPointers)
+						printMemoryPointers(cast(const(void*)[])addr[0 .. size]);
+					printf("\n");
+				}
+			}
+		}
+	}
+	foreach(uint aidx; 0 .. ArenaCount)
+	{
+		auto arena = Arena.getIfInitialized(aidx);
+		if(arena is null) continue;
+		auto cp = arena.containsPointers;
+		const char* isptr;
+		if(cp) isptr = "ptr";
+		else isptr = "noptr";
+		printf("Arena %d (%s):\n", aidx, isptr);
+		// go through all the blocks
+		processBlocks((cast(Arena*)arena).filler.denseBlocks, cp);
+		processBlocks((cast(Arena*)arena).filler.sparseBlocks, cp);
 	}
 }
 

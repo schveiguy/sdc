@@ -48,7 +48,7 @@ void __sd_gc_pre_suspend_hook(void* stackTop) {
 		 * pushed on it.
 		 */
 		import d.gc.tcache;
-		threadCache.clearTLSSegments();
+		//threadCache.clearTLSSegments();
 	}
 }
 

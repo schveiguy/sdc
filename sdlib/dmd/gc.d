@@ -124,7 +124,8 @@ size_t __sd_gc_get_array_capacity(void[] slice) {
 }
 
 void* __sd_gc_alloc_from_druntime(size_t size, uint flags, void* finalizer) {
-	bool containsPointers = (flags & BlkAttr.NO_SCAN) == 0;
+	//bool containsPointers = (flags & BlkAttr.NO_SCAN) == 0;
+	bool containsPointers = true;
 	if ((flags & BlkAttr.APPENDABLE) != 0 || finalizer) {
 		// Add a byte to prevent cross-allocation pointers.
 		return threadCache

@@ -69,9 +69,9 @@ void __sd_gc_add_roots(const void[] range) {
 	gState.addRoots(range);
 }
 
-void __sd_gc_remove_roots(const void* ptr) {
+void __sd_gc_remove_roots(const void* ptr, bool isRange) {
 	import d.gc.global;
-	gState.removeRoots(ptr);
+	gState.removeRoots(ptr, isRange);
 }
 
 void __sd_gc_add_tls_segment(const void[] range) {

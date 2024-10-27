@@ -162,3 +162,47 @@ extern(C) void __sd_gc_signal_resume(int sig) {
 	import d.gc.tcache;
 	threadCache.state.onResumeSignal();
 }
+
+shared bool printData = false;
+
+extern(C) void shouldPrintData(int sig) {
+	*cast(bool*)&printData = true;
+}
+
+void suspendForFullPrintout() {
+	sigaction_t action;
+	initSuspendSigSet(&action.sa_mask);
+
+	action.sa_flags = SA_RESTART;
+	action.sa_handler = shouldPrintData;
+
+	if (sigaction(SIGRESUME, &action, null) != 0) {
+		import core.stdc.stdlib, core.stdc.stdio;
+		printf("Failed to set suspend handler!");
+		exit(1);
+	}
+
+	sigset_t set;
+	initSuspendSigSet(&set);
+
+	/**
+	 * Suspend this thread's execution untill the resume signal is sent.
+	 * 
+	 * We could stop all the thread by having them wait on a mutex,
+	 * but we also want to ensure that we do not run code via signals
+	 * while the thread is suspended, and the mutex solution is unable
+	 * to provide that guarantee, so we use sigsuspend instead.
+	 */
+	if (sigdelset(&set, SIGRESUME) != 0) {
+		import core.stdc.stdlib, core.stdc.stdio;
+		printf("sigdelset failed!");
+		exit(1);
+	}
+
+	// When the resume signal is recieved, the suspend state is updated.
+	auto pdata = cast(bool*)&printData;
+	*pdata = false;
+	while (!*pdata) {
+		sigsuspend(&set);
+	}
+}

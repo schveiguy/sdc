@@ -8,6 +8,11 @@ import d.gc.range;
 import d.gc.spec;
 import d.gc.util;
 
+extern(C) {
+	void free(void*);
+	void* realloc(void* ptr, size_t size);
+}
+
 struct Scanner {
 private:
 	import d.sync.mutex;
@@ -69,14 +74,14 @@ public:
 		}
 
 		// Scan the roots.
-		__sd_gc_global_scan(addToWorkList);
+		__sd_gc_global_scan(addToWorkListRoot);
 
 		// Now send this thread marking!
 		runMark();
 
 		// We now done, we can free the worklist.
 		import d.gc.tcache;
-		threadCache.free(cast(void*) worklist.ptr);
+		free(cast(void*) worklist.ptr);
 
 		foreach (tid; threads) {
 			void* ret;
@@ -95,6 +100,11 @@ public:
 		addToWorkList((&item)[0 .. 1]);
 	}
 
+	void addToWorkListRoot(const(void*)[] item) shared {
+		import d.gc.collector;
+		printAddressRange("Root", item.ptr, item.ptr + item.length);
+		addToWorkList(item);
+	}
 	void addToWorkList(const(void*)[] range) shared {
 		// In order to expose some parallelism, we split the range
 		// into smaller chunks to be distributed.
@@ -219,7 +229,8 @@ private:
 		}
 
 		import d.gc.tcache;
-		auto ptr = threadCache.realloc(worklist.ptr, size, false);
+		//auto ptr = threadCache.realloc(worklist.ptr, size, false);
+		auto ptr = realloc(worklist.ptr, size);
 		worklist = (cast(WorkItem*) ptr)[0 .. size / WorkItem.sizeof];
 	}
 

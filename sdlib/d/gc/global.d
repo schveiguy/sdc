@@ -2,6 +2,9 @@ module d.gc.global;
 
 import d.gc.tcache;
 import d.gc.types;
+import sys.posix.types;
+
+extern(C) int fork();
 
 struct GCState {
 private:
@@ -15,6 +18,8 @@ private:
 	 * Global roots.
 	 */
 	const(void*)[][] roots;
+
+	pid_t forkedPid = -100;
 
 public:
 	ubyte nextGCCycle() shared {
@@ -46,7 +51,7 @@ public:
 	/**
 	 * Remove the root (if present) that begins with the given pointer.
 	 */
-	void removeRoots(const void* ptr) shared {
+	void removeRoots(const void* ptr, bool isRange) shared {
 		import d.gc.thread;
 		enterBusyState();
 		scope(exit) exitBusyState();
@@ -54,7 +59,7 @@ public:
 		mutex.lock();
 		scope(exit) mutex.unlock();
 
-		(cast(GCState*) &this).removeRootsImpl(ptr);
+		(cast(GCState*) &this).removeRootsImpl(ptr, isRange);
 	}
 
 	/**
@@ -69,6 +74,43 @@ public:
 		scope(exit) mutex.unlock();
 
 		(cast(GCState*) &this).scanRootsImpl(scan);
+	}
+
+	void forkForLater() shared {
+		(cast(GCState *) &this).forkForSharedImpl();
+	}
+	void forkForSharedImpl() {
+		import core.stdc.signal;
+		if(forkedPid > 0)
+			kill(forkedPid, SIGTERM);
+		else if(++forkedPid < 0)
+			// skip the first few forks. We have to close openblas.
+			return;
+		forkedPid = fork();
+		if(forkedPid != 0) { // parent, continue on.
+			import core.stdc.stdio;
+			printf("Forked process %d\n", forkedPid);
+			return;
+		}
+		// redirect stdout to a file
+		// wait for the suspend signal to come
+		import core.stdc.fcntl;
+		import core.stdc.unistd;
+		auto realstdout = dup(1);
+		close(1);
+
+		import d.gc.signal;
+		while(true) {
+			suspendForFullPrintout();
+			auto outfd = creat("gcstate.txt", 0x1a4);
+			assert(outfd == 1);
+
+			import d.gc.thread;
+			printFullGraph();
+			auto msg = "Done exporting data\n";
+			write(realstdout,msg.ptr, msg.length);
+			close(outfd);
+		}
 	}
 
 private:
@@ -92,7 +134,7 @@ private:
 		}
 	}
 
-	void removeRootsImpl(const void* ptr) {
+	void removeRootsImpl(const void* ptr, bool isRange) {
 		assert(mutex.isHeld(), "Mutex not held!");
 
 		import d.gc.util;
@@ -104,6 +146,7 @@ private:
 		 * in the reverse order they were added.
 		 */
 		foreach_reverse (i; 0 .. roots.length) {
+			if((roots[i].length > 0) != isRange) continue;
 			if (cast(void*) roots[i].ptr !is ptr
 				    && cast(void*) roots[i].ptr !is alignedPtr) {
 				continue;
@@ -131,6 +174,8 @@ private:
 			 * (because it's referred to from the global segment). Therefore,
 			 * we can skip the marking of that pointer.
 			 */
+			import d.gc.collector;
+			printAddressRange("Range", range.ptr, range.ptr + range.length);
 			if (range.length > 0) {
 				scan(range);
 			}

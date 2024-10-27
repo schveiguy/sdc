@@ -348,7 +348,7 @@ ulong next(ulong x) {
 	return x + 1;
 }
 
-bool isValidAddress(void* address) {
+bool isValidAddress(const(void)* address) {
 	auto a = cast(size_t) address;
 	return (a & PagePointerMask) == a;
 }

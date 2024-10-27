@@ -302,3 +302,6 @@ long syscall(long __sysno, ...);
  * Linux specifc extension.
  */
 pid_t gettid();
+
+int dup(int oldfd);
+int dup2(int oldfd, int newfd);

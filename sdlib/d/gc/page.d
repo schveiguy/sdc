@@ -815,6 +815,20 @@ private:
 		e.slabMetadataFlags.rawContent[nimbleIndex] = metadataFlags;
 	}
 
+	static void poisonFreedSlabs(void *address, size_t nimbleIndex, ubyte sizeClass, size_t evicted) {
+		import d.gc.slab;
+		auto slotSize = binInfos[sizeClass].slotSize;
+		void* nimbleBase = address + (nimbleIndex * 64 * slotSize);
+
+		while (evicted != 0) {
+			auto index = countTrailingZeros(evicted);
+			void* ptr = nimbleBase + index * slotSize;
+
+			memset(ptr, 0xb5, slotSize);
+			evicted &= (evicted - 1);
+		}
+	}
+
 	void collectDenseAllocations(ref CachedExtentMap emap,
 	                             PriorityExtentHeap[] slabs) {
 		assert(mutex.isHeld(), "Mutex not held!");
@@ -873,11 +887,13 @@ private:
 					scope(success) e.slabData.rawContent[i] = newOccupancy;
 
 					if (!ec.supportsMetadata) {
+						poisonFreedSlabs(e.address, i, sc, evicted);
 						continue;
 					}
 
 					auto metadataFlags = e.slabMetadataFlags.rawContent[i];
 					finalizeSlabNimble(evicted, metadataFlags, sc, e, i);
+					poisonFreedSlabs(e.address, i, sc, evicted);
 				}
 
 				// The slab is empty.
@@ -990,6 +1006,8 @@ private:
 					continue;
 				}
 
+				poisonFreedSlabs(e.address, 0, ec.sizeClass, evicted);
+
 				auto count = popCount(evicted);
 
 				e.slabData.rawContent[0] = newOccupancy;
@@ -1021,6 +1039,8 @@ private:
 	void freeExtentLocked(ref CachedExtentMap emap, Extent* e) {
 		assert(isAligned(e.address, PageSize), "Invalid extent address!");
 
+		// poison any freed space.
+		memset(e.address, 0xb3, e.size);
 		emap.clear(e);
 
 		uint n = e.blockIndex;

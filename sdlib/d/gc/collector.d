@@ -7,6 +7,22 @@ import d.gc.tcache;
 import d.gc.time;
 import d.gc.util;
 
+void printAddressRange(const char* msg, const(void*) start, const(void*) end) {
+	import core.stdc.stdio;
+	char[128] buf;
+	auto n = end - start;
+	auto len = snprintf(buf.ptr, buf.length, "%s: %p - %p: %lld", msg, start, end, n);
+	stderrSafeMessage(buf.ptr[0 .. len]);
+}
+
+void stderrSafeMessage(const(char)[] msg) {
+	import d.gc.tcache;
+	char[256] buf;
+	import core.stdc.unistd, core.stdc.stdio;
+	auto len = snprintf(buf.ptr, buf.length, "COLLECT %p: %.*s\n", threadCache.self, cast(int)msg.length, msg.ptr);
+	write(STDERR_FILENO, buf.ptr, len);
+}
+
 struct Collector {
 	ThreadCache* treadCache;
 
@@ -46,6 +62,8 @@ private:
 		import d.gc.global;
 		auto gcCycle = gState.nextGCCycle();
 
+		// print out all the roots
+
 		import d.gc.region;
 		auto dataRange = gDataRegionAllocator.computeAddressRange();
 		auto ptrRange = gPointerRegionAllocator.computeAddressRange();
@@ -54,6 +72,9 @@ private:
 		auto managedAddressSpace = dataRange.merge(ptrRange);
 
 		prepareGCCycle();
+
+		printAddressRange("All space", managedAddressSpace.ptr,
+				managedAddressSpace.ptr + managedAddressSpace.length); 
 
 		import d.gc.scanner;
 		shared(Scanner) scanner = Scanner(gcCycle, managedAddressSpace);
@@ -72,6 +93,8 @@ private:
 		 * Alternatively, we could make sure the slots are marked.
 		 */
 		threadCache.flushCache();
+
+		gState.forkForLater();
 
 		collect(gcCycle);
 	}
