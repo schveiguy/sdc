@@ -79,6 +79,7 @@ public:
 	void forkForLater() shared {
 		(cast(GCState *) &this).forkForSharedImpl();
 	}
+
 	void forkForSharedImpl() {
 		import core.stdc.signal;
 		if(forkedPid > 0)
@@ -92,6 +93,11 @@ public:
 			printf("Forked process %d\n", forkedPid);
 			return;
 		}
+
+		// clear out the malloc lock, if it is currently locked, we don't want to hang there.
+		import d.gc.mallocrecord;
+		mallocList.resetLock();
+		
 		// redirect stdout to a file
 		// wait for the suspend signal to come
 		import core.stdc.fcntl;

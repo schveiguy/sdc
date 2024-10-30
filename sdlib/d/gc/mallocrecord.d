@@ -19,7 +19,7 @@ extern(C) void* malloc(size_t size) {
 	ensureHooks(mallocptr);
 	auto ptr = mallocptr(size);
 	// record a range
-	rangeBuffer.addRange(ptr[0 .. size]);
+	mallocList.addRange(ptr[0 .. size]);
 	return ptr;
 }
 
@@ -27,7 +27,7 @@ extern(C) void free(void* ptr)
 {
 	ensureHooks(freeptr);
 	// remove the range
-	rangeBuffer.removeRange(ptr);
+	mallocList.removeRange(ptr);
 	freeptr(ptr);
 }
 
@@ -42,7 +42,7 @@ extern(C) void* realloc(void* ptr, size_t newsize)
 		return null;
 	}
 	auto result = reallocptr(ptr, newsize);
-	rangeBuffer.updateRange(ptr, result[0 .. newsize]);
+	mallocList.updateRange(ptr, result[0 .. newsize]);
 	return result;
 }
 
@@ -52,11 +52,11 @@ extern(C) void* calloc(size_t size, size_t elemsize)
 	auto allocSize = size * elemsize;
 	auto result = mallocptr(allocSize);
 	memset(result, 0, allocSize);
-	rangeBuffer.addRange(result[0 .. allocSize]);
+	mallocList.addRange(result[0 .. allocSize]);
 	return result;
 }
 
-struct RangeBuffer {
+struct MallocRangeBuffer {
 private:
 	import d.sync.mutex;
 	Mutex mutex;
@@ -72,7 +72,7 @@ public:
 		}
 		mutex.lock();
 		scope(exit) mutex.unlock();
-		(cast(RangeBuffer*)&this).addRangeImpl(range);
+		(cast(MallocRangeBuffer*)&this).addRangeImpl(range);
 	}
 
 	void removeRange(const void* rangePtr) shared
@@ -83,14 +83,14 @@ public:
 		}
 		mutex.lock();
 		scope(exit) mutex.unlock();
-		(cast(RangeBuffer*)&this).removeRangeImpl(rangePtr);
+		(cast(MallocRangeBuffer*)&this).removeRangeImpl(rangePtr);
 	}
 
 	void updateRange(const void* origRangePtr, void[] newRange) shared
 	{
 		mutex.lock();
 		scope(exit) mutex.unlock();
-		(cast(RangeBuffer*)&this).updateRangeImpl(origRangePtr, newRange);
+		(cast(MallocRangeBuffer*)&this).updateRangeImpl(origRangePtr, newRange);
 	}
 
 	void[] getRangeFromPtr(const void* interior) shared
@@ -99,13 +99,19 @@ public:
 			return [];
 		mutex.lock();
 		scope(exit) mutex.unlock();
-		return (cast(RangeBuffer*)&this).getRangeFromPtrImpl(interior);
+		return (cast(MallocRangeBuffer*)&this).getRangeFromPtrImpl(interior);
 	}
 
 	// IMPORTANT! only call from forked process
 	void resetLock() shared {
 		import core.stdc.stdlib;
 		memset(cast(void*)&mutex, 0, Mutex.sizeof);
+	}
+
+	// IMPORTANT! only use this list with the world stopped, as it can be modified while running.
+	const(void[][]) getList() shared {
+		auto mrb = cast(MallocRangeBuffer*)&this;
+		return mrb.buffer[0 .. mrb.len];
 	}
 
 private:
@@ -169,4 +175,4 @@ private:
 	}
 }
 
-shared RangeBuffer rangeBuffer;
+shared MallocRangeBuffer mallocList;

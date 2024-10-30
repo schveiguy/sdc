@@ -399,6 +399,16 @@ void printFullGraph() {
 					printf(" (L%lld:%p)", npages * PageSize, e.address);
 				}
 			}
+			else
+			{
+				// might be a malloc pointer. Look in the list of malloc ranges.
+				import d.gc.mallocrecord;
+				auto rng = mallocList.getRangeFromPtr(p);
+				if(rng.ptr) {
+					// use a different reference character for malloc-reference
+					printf(" r:%p (M%lld:%p)", p, rng.length, rng.ptr);
+				}
+			}
 		}
 	}
 	// just run the global scan with a delegate to print the roots
@@ -497,6 +507,17 @@ void printFullGraph() {
 		// go through all the blocks
 		processBlocks((cast(Arena*)arena).filler.denseBlocks, cp);
 		processBlocks((cast(Arena*)arena).filler.sparseBlocks, cp);
+	}
+
+	// print the malloc blocks
+	import d.gc.mallocrecord;
+	auto mallocRange = mallocList.getList();
+	foreach(r; mallocRange)
+	{
+		printf("Malloc: %lld:%p", r.length, r.ptr);
+		import d.gc.range;
+		printMemoryPointers(makeRange(r));
+		printf("\n");
 	}
 }
 
