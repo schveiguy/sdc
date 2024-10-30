@@ -401,13 +401,14 @@ void printFullGraph() {
 			}
 		}
 	}
-	auto roots = (cast(GCState*)&gState).roots;
-	foreach(r; roots)
-	{
+	// just run the global scan with a delegate to print the roots
+	void printRoot(const(void*)[] r) {
 		printf("Root: %p - %p (%lld)", r.ptr, r.ptr + r.length, r.length * PointerSize);
 		printMemoryPointers(r);
 		printf("\n");
 	}
+	import d.gc.hooks;
+	__sd_gc_global_scan(printRoot);
 
 	auto emap = &threadCache.emap;
 	auto cycle = gState.cycle.load();

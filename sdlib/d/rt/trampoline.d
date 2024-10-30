@@ -78,6 +78,9 @@ int resolve_pthread_create(pthread_t* thread, const pthread_attr_t* attr,
                            PthreadFunction start_routine, void* arg) {
 	PthreadCreateType real_pthread_create;
 
+	import d.gc.mallocrecord;
+	ensureHooks(null);
+
 	// First, check if there is an interceptor and if so, use it.
 	// This ensure we remain compatible with sanitizers, as they use
 	// a similar trick to intercept various library calls.

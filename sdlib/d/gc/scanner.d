@@ -8,10 +8,10 @@ import d.gc.range;
 import d.gc.spec;
 import d.gc.util;
 
-extern(C) {
+/*extern(C) {
 	void free(void*);
 	void* realloc(void* ptr, size_t size);
-}
+}*/
 
 struct Scanner {
 private:
@@ -81,7 +81,7 @@ public:
 
 		// We now done, we can free the worklist.
 		import d.gc.tcache;
-		free(cast(void*) worklist.ptr);
+		threadCache.free(cast(void*) worklist.ptr);
 
 		foreach (tid; threads) {
 			void* ret;
@@ -229,8 +229,8 @@ private:
 		}
 
 		import d.gc.tcache;
-		//auto ptr = threadCache.realloc(worklist.ptr, size, false);
-		auto ptr = realloc(worklist.ptr, size);
+		auto ptr = threadCache.realloc(worklist.ptr, size, false);
+		//auto ptr = realloc(worklist.ptr, size);
 		worklist = (cast(WorkItem*) ptr)[0 .. size / WorkItem.sizeof];
 	}
 
