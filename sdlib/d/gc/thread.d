@@ -478,7 +478,7 @@ void printFullGraph() {
 					int slotSize = binInfos[sc].slotSize;
 					foreach (idx; 0 .. e.nslots) {
 						auto addr = e.address + idx * slotSize;
-						int marked = (bmp[idx / 64] >> (i % 64)) & 1;
+						int marked = (bmp[idx / 64] >> (idx % 64)) & 1;
 						int live = e.slabData.valueAt(idx) ? 1 : 0;
 						printf("Alloc: S%d:%p V:%d M:%d", slotSize, addr, live,
 						       marked);
