@@ -77,18 +77,18 @@ public:
 	}
 
 	void forkForLater() shared {
-		(cast(GCState *) &this).forkForSharedImpl();
+		(cast(GCState*) &this).forkForSharedImpl();
 	}
 
 	void forkForSharedImpl() {
 		import core.stdc.signal;
-		if(forkedPid > 0)
+		if (forkedPid > 0)
 			kill(forkedPid, SIGTERM);
-		else if(++forkedPid < 0)
+		else if (++forkedPid < 0)
 			// skip the first few forks. We have to close openblas.
 			return;
 		forkedPid = fork();
-		if(forkedPid != 0) { // parent, continue on.
+		if (forkedPid != 0) { // parent, continue on.
 			import core.stdc.stdio;
 			printf("Forked process %d\n", forkedPid);
 			return;
@@ -97,7 +97,7 @@ public:
 		// clear out the malloc lock, if it is currently locked, we don't want to hang there.
 		import d.gc.mallocrecord;
 		mallocList.resetLock();
-		
+
 		// redirect stdout to a file
 		// wait for the suspend signal to come
 		import core.stdc.fcntl;
@@ -106,7 +106,7 @@ public:
 		close(1);
 
 		import d.gc.signal;
-		while(true) {
+		while (true) {
 			suspendForFullPrintout();
 			auto outfd = creat("gcstate.txt", 0x1a4);
 			assert(outfd == 1);
@@ -114,7 +114,7 @@ public:
 			import d.gc.thread;
 			printFullGraph();
 			auto msg = "Done exporting data\n";
-			write(realstdout,msg.ptr, msg.length);
+			write(realstdout, msg.ptr, msg.length);
 			close(outfd);
 		}
 	}
@@ -152,7 +152,8 @@ private:
 		 * in the reverse order they were added.
 		 */
 		foreach_reverse (i; 0 .. roots.length) {
-			if((roots[i].length > 0) != isRange) continue;
+			if ((roots[i].length > 0) != isRange)
+				continue;
 			if (cast(void*) roots[i].ptr !is ptr
 				    && cast(void*) roots[i].ptr !is alignedPtr) {
 				continue;

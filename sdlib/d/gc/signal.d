@@ -166,7 +166,7 @@ extern(C) void __sd_gc_signal_resume(int sig) {
 shared bool printData = false;
 
 extern(C) void shouldPrintData(int sig) {
-	*cast(bool*)&printData = true;
+	*cast(bool*) &printData = true;
 }
 
 void suspendForFullPrintout() {
@@ -200,7 +200,7 @@ void suspendForFullPrintout() {
 	}
 
 	// When the resume signal is recieved, the suspend state is updated.
-	auto pdata = cast(bool*)&printData;
+	auto pdata = cast(bool*) &printData;
 	*pdata = false;
 	while (!*pdata) {
 		sigsuspend(&set);

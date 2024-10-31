@@ -371,6 +371,7 @@ private:
 		if (unlikely(zero)) {
 			memset(ptr, 0, slotSize);
 		}
+
 		/*else if (containsPointers) {
 			// clear out any data that was not requested
 			memset(ptr + size, 0, slotSize - size);
@@ -435,7 +436,7 @@ private:
 		// put in a sentinel pattern to make things break quicker.
 		memset(ptr, 0xa3, slotSize);
 		auto si = SlabAllocInfo(pd, ptr);
-		if(si.hasMetadata)
+		if (si.hasMetadata)
 			pd.extent.disableMetadata(si.index);
 
 		auto index = getBinIndex(sc, pd.containsPointers);

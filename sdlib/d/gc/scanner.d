@@ -105,6 +105,7 @@ public:
 		printAddressRange("Root", item.ptr, item.ptr + item.length);
 		addToWorkList(item);
 	}
+
 	void addToWorkList(const(void*)[] range) shared {
 		// In order to expose some parallelism, we split the range
 		// into smaller chunks to be distributed.

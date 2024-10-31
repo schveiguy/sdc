@@ -815,7 +815,8 @@ private:
 		e.slabMetadataFlags.rawContent[nimbleIndex] = metadataFlags;
 	}
 
-	static void poisonFreedSlabs(void *address, size_t nimbleIndex, ubyte sizeClass, size_t evicted) {
+	static void poisonFreedSlabs(void* address, size_t nimbleIndex,
+	                             ubyte sizeClass, size_t evicted) {
 		import d.gc.slab;
 		auto slotSize = binInfos[sizeClass].slotSize;
 		void* nimbleBase = address + (nimbleIndex * 64 * slotSize);

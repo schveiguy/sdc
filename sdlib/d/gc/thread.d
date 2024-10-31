@@ -17,10 +17,10 @@ void stderrSafeMessage(const(char)[] msg) {
 	import d.gc.tcache;
 	char[256] buf;
 	import core.stdc.unistd, core.stdc.stdio;
-	auto len = snprintf(buf.ptr, buf.length, "MESSAGE %p: %.*s\n", threadCache.self, cast(int)msg.length, msg.ptr);
+	auto len = snprintf(buf.ptr, buf.length, "MESSAGE %p: %.*s\n",
+	                    threadCache.self, cast(int) msg.length, msg.ptr);
 	write(STDERR_FILENO, buf.ptr, len);
 }
-
 
 void createProcess() {
 	enterBusyState();
@@ -378,45 +378,43 @@ void printFullGraph() {
 	// ignore any locks, we are printing this from a child process that has no other threads.
 	import d.gc.global;
 	import core.stdc.stdio;
-	static void printMemoryPointers(const(void*)[] range)
-	{
-		foreach(p; range)
-		{
+	static void printMemoryPointers(const(void*)[] range) {
+		foreach (p; range) {
 			import d.gc.rtree;
-			if(!isValidAddress(p)) continue;
+			if (!isValidAddress(p))
+				continue;
 			auto pd = threadCache.maybeGetPageDescriptor(p);
 			auto e = pd.extent;
-			if(e)
-			{
+			if (e) {
 				printf(" R:%p", p);
-				if(pd.isSlab()) {
+				if (pd.isSlab()) {
 					import d.gc.slab;
 					auto si = SlabAllocInfo(pd, p);
 					printf(" (S%d:%p)", si.slotSize, si._address);
-				}
-				else {
+				} else {
 					auto npages = e.npages;
 					printf(" (L%lld:%p)", npages * PageSize, e.address);
 				}
-			}
-			else
-			{
+			} else {
 				// might be a malloc pointer. Look in the list of malloc ranges.
 				import d.gc.mallocrecord;
 				auto rng = mallocList.getRangeFromPtr(p);
-				if(rng.ptr) {
+				if (rng.ptr) {
 					// use a different reference character for malloc-reference
 					printf(" r:%p (M%lld:%p)", p, rng.length, rng.ptr);
 				}
 			}
 		}
 	}
+
 	// just run the global scan with a delegate to print the roots
 	void printRoot(const(void*)[] r) {
-		printf("Root: %p - %p (%lld)", r.ptr, r.ptr + r.length, r.length * PointerSize);
+		printf("Root: %p - %p (%lld)", r.ptr, r.ptr + r.length,
+		       r.length * PointerSize);
 		printMemoryPointers(r);
 		printf("\n");
 	}
+
 	import d.gc.hooks;
 	__sd_gc_global_scan(printRoot);
 
@@ -427,27 +425,27 @@ void printFullGraph() {
 	import d.gc.arena;
 	import d.gc.block;
 	static void processBlocks(ref AllBlockRing blocks, bool hasPointers) {
-		for(auto r = blocks.range; !r.empty; r.popFront())
-		{
+		for (auto r = blocks.range; !r.empty; r.popFront()) {
 			auto block = r.front;
 			auto bem = emap.blockLookup(block.address);
 			uint i = 0;
-			while(i < PagesInBlock) {
+			while (i < PagesInBlock) {
 				i = block.nextAllocatedPage(i);
-				if(i >= PagesInBlock) {
+				if (i >= PagesInBlock) {
 					break;
 				}
 
 				auto pd = bem.lookup(i);
 				auto e = pd.extent;
-				if(e is null) {
+				if (e is null) {
 					// probably GC metadata
 					++i;
 					continue;
 				}
-				i += e.npages;
-				if(e.isSlab())
-				{
+
+				auto npages = e.npages;
+				scope(success) i += npages;
+				if (e.isSlab()) {
 					auto ec = pd.extentClass;
 					auto sc = ec.sizeClass;
 
@@ -455,12 +453,12 @@ void printFullGraph() {
 					ulong* bmp;
 					ulong sparseMarks;
 					if (ec.supportsInlineMarking) {
-						if(ec.dense)
+						if (ec.dense)
 							bmp = cast(ulong*) &e.slabMetadataMarks;
 						else {
 							auto ecycle = e.gcWord.load();
 							bmp = &sparseMarks;
-							if((ecycle & 0xff) == cycle)
+							if ((ecycle & 0xff) == cycle)
 								sparseMarks = ecycle >> 8;
 							else
 								sparseMarks = 0;
@@ -471,49 +469,53 @@ void printFullGraph() {
 
 					import d.gc.slab;
 					int slotSize = binInfos[sc].slotSize;
-					foreach(idx; 0 .. e.nslots){
+					foreach (idx; 0 .. e.nslots) {
 						auto addr = e.address + idx * slotSize;
 						int marked = (bmp[idx / 64] >> (i % 64)) & 1;
 						int live = e.slabData.valueAt(idx) ? 1 : 0;
-						printf("Alloc: S%d:%p V:%d M:%d", slotSize, addr, live, marked);
-						if(live && hasPointers)
-							printMemoryPointers(cast(const(void*)[])addr[0 .. slotSize]);
+						printf("Alloc: S%d:%p V:%d M:%d", slotSize, addr, live,
+						       marked);
+						if (live/* && hasPointers*/)
+							printMemoryPointers(
+								cast(const(void*)[]) addr[0 .. slotSize]);
 						printf("\n");
 					}
-				}
-				else
-				{
+				} else {
+					import d.gc.util;
+					i += modUp(e.npages, PointerInPage);
 					auto ecycle = e.gcWord.load();
 					auto marked = ecycle == cycle;
 					auto size = e.size;
 					auto addr = e.address;
 					printf("Alloc: L%d:%p V:1 M:%d", size, addr, marked);
-					if(hasPointers)
-						printMemoryPointers(cast(const(void*)[])addr[0 .. size]);
+					//if(hasPointers)
+					printMemoryPointers(cast(const(void*)[]) addr[0 .. size]);
 					printf("\n");
 				}
 			}
 		}
 	}
-	foreach(uint aidx; 0 .. ArenaCount)
-	{
+
+	foreach (uint aidx; 0 .. ArenaCount) {
 		auto arena = Arena.getIfInitialized(aidx);
-		if(arena is null) continue;
+		if (arena is null)
+			continue;
 		auto cp = arena.containsPointers;
 		const char* isptr;
-		if(cp) isptr = "ptr";
-		else isptr = "noptr";
+		if (cp)
+			isptr = "ptr";
+		else
+			isptr = "noptr";
 		printf("Arena %d (%s):\n", aidx, isptr);
 		// go through all the blocks
-		processBlocks((cast(Arena*)arena).filler.denseBlocks, cp);
-		processBlocks((cast(Arena*)arena).filler.sparseBlocks, cp);
+		processBlocks((cast(Arena*) arena).filler.denseBlocks, cp);
+		processBlocks((cast(Arena*) arena).filler.sparseBlocks, cp);
 	}
 
 	// print the malloc blocks
 	import d.gc.mallocrecord;
 	auto mallocRange = mallocList.getList();
-	foreach(r; mallocRange)
-	{
+	foreach (r; mallocRange) {
 		printf("Malloc: %lld:%p", r.length, r.ptr);
 		import d.gc.range;
 		printMemoryPointers(makeRange(r));

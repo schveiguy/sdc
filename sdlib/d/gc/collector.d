@@ -11,7 +11,8 @@ void printAddressRange(const char* msg, const(void*) start, const(void*) end) {
 	import core.stdc.stdio;
 	char[128] buf;
 	auto n = end - start;
-	auto len = snprintf(buf.ptr, buf.length, "%s: %p - %p: %lld", msg, start, end, n);
+	auto len =
+		snprintf(buf.ptr, buf.length, "%s: %p - %p: %lld", msg, start, end, n);
 	stderrSafeMessage(buf.ptr[0 .. len]);
 }
 
@@ -19,7 +20,8 @@ void stderrSafeMessage(const(char)[] msg) {
 	import d.gc.tcache;
 	char[256] buf;
 	import core.stdc.unistd, core.stdc.stdio;
-	auto len = snprintf(buf.ptr, buf.length, "COLLECT %p: %.*s\n", threadCache.self, cast(int)msg.length, msg.ptr);
+	auto len = snprintf(buf.ptr, buf.length, "COLLECT %p: %.*s\n",
+	                    threadCache.self, cast(int) msg.length, msg.ptr);
 	write(STDERR_FILENO, buf.ptr, len);
 }
 
@@ -74,7 +76,7 @@ private:
 		prepareGCCycle();
 
 		printAddressRange("All space", managedAddressSpace.ptr,
-				managedAddressSpace.ptr + managedAddressSpace.length); 
+		                  managedAddressSpace.ptr + managedAddressSpace.length);
 
 		import d.gc.scanner;
 		shared(Scanner) scanner = Scanner(gcCycle, managedAddressSpace);

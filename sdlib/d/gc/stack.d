@@ -6,10 +6,10 @@ void printStackTopDiff(const(void*) drt, const(void*) sdc) {
 	import core.stdc.stdio;
 	import d.gc.collector;
 	char[128] buf;
-	auto len = snprintf(buf.ptr, buf.length, "stack top cmp: %p - %p = %lld", drt, sdc, drt - sdc);
+	auto len = snprintf(buf.ptr, buf.length, "stack top cmp: %p - %p = %lld",
+	                    drt, sdc, drt - sdc);
 	stderrSafeMessage(buf.ptr[0 .. len]);
 }
-
 
 version(OSX) {
 	// For some reason OSX's symbol get a _ prepended.
@@ -29,8 +29,7 @@ void scanStack(ScanDg scan) {
 	//__ext_callWithStackShell(cast(void function(ThreadScanner*)) druntime_scan, &ts);
 }
 
-extern(C) void druntime_scan(ThreadScanner* ts)
-{
+extern(C) void druntime_scan(ThreadScanner* ts) {
 	ts.scanStack();
 }
 
@@ -46,6 +45,7 @@ struct ThreadScanner {
 	void scanStack() {
 		import sdc.intrinsics;
 		auto top = readFramePointer();
+
 		//auto druntimetop = thread_stackTop();
 		//printStackTopDiff(druntimetop, top);
 		//top = druntimetop;
