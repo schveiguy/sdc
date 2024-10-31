@@ -378,10 +378,13 @@ void printFullGraph() {
 	// ignore any locks, we are printing this from a child process that has no other threads.
 	import d.gc.global;
 	import core.stdc.stdio;
+	import d.gc.range;
 	static void printMemoryPointers(const(void*)[] range) {
 		foreach (p; range) {
 			import d.gc.rtree;
-			if (!isValidAddress(p))
+			import d.gc.util;
+			auto aptr = alignDown(p, PageSize);
+			if (!isValidAddress(aptr))
 				continue;
 			auto pd = threadCache.maybeGetPageDescriptor(p);
 			auto e = pd.extent;
@@ -392,7 +395,7 @@ void printFullGraph() {
 					auto si = SlabAllocInfo(pd, p);
 					printf(" (S%d:%p)", si.slotSize, si._address);
 				} else {
-					auto npages = e.npages;
+					ulong npages = e.npages;
 					printf(" (L%lld:%p)", npages * PageSize, e.address);
 				}
 			} else {
@@ -415,11 +418,15 @@ void printFullGraph() {
 		printf("\n");
 	}
 
+	auto cycle = gState.cycle.load();
+	import d.gc.emap;
+	printf("GC cycle: %d, rtree nodes at: %p\n", cast(uint) cycle,
+	       gExtentMap.tree.nodes.ptr);
+
 	import d.gc.hooks;
 	__sd_gc_global_scan(printRoot);
 
 	auto emap = &threadCache.emap;
-	auto cycle = gState.cycle.load();
 
 	// now print all the allocated blocks
 	import d.gc.arena;
@@ -476,8 +483,7 @@ void printFullGraph() {
 						printf("Alloc: S%d:%p V:%d M:%d", slotSize, addr, live,
 						       marked);
 						if (live/* && hasPointers*/)
-							printMemoryPointers(
-								cast(const(void*)[]) addr[0 .. slotSize]);
+							printMemoryPointers(makeRange(addr[0 .. slotSize]));
 						printf("\n");
 					}
 				} else {
@@ -489,7 +495,7 @@ void printFullGraph() {
 					auto addr = e.address;
 					printf("Alloc: L%d:%p V:1 M:%d", size, addr, marked);
 					//if(hasPointers)
-					printMemoryPointers(cast(const(void*)[]) addr[0 .. size]);
+					printMemoryPointers(makeRange(addr[0 .. size]));
 					printf("\n");
 				}
 			}
@@ -517,7 +523,6 @@ void printFullGraph() {
 	auto mallocRange = mallocList.getList();
 	foreach (r; mallocRange) {
 		printf("Malloc: %lld:%p", r.length, r.ptr);
-		import d.gc.range;
 		printMemoryPointers(makeRange(r));
 		printf("\n");
 	}
