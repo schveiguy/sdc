@@ -148,9 +148,12 @@ private:
 
 	GCMetadata _gcMetadata;
 
-	// TODO: Reuse this data to do something useful,
-	// like garbage collection :P
-	void* _pad1;
+	union ImmortalMetadata {
+		ExtentImmortal* immortals;
+		ulong immortalBits;
+	}
+
+	ImmortalMetadata _immortalMetadata;
 
 	/**
 	 * When this is a slab, the second part of the Extent is made
@@ -410,6 +413,12 @@ public:
 
 		bits += FreeSlotsUnit;
 		slabData.clearBit(index);
+
+		if (extentClass.sparse) {
+			_immortalMetadata.immortalBits &= ~(1 << index);
+		} else if (_immortalMetadata.immortals !is null) {
+			_immortalMetadata.immortals.forget(index);
+		}
 	}
 
 	/**
@@ -421,6 +430,18 @@ public:
 		assert(isSlab(), "slabData accessed on non slab!");
 
 		return _metadata.slabData.slabData;
+	}
+
+	@property
+	ref ExtentImmortal* immortals() {
+		assert(extentClass.dense, "immortals accessed on sparse extent!");
+		return _immortalMetadata.immortals;
+	}
+
+	@property
+	ref ulong immortalBits() {
+		assert(extentClass.sparse, "immortalBits accessed on dense extent!");
+		return _immortalMetadata.immortalBits;
 	}
 
 	@property
@@ -706,9 +727,11 @@ unittest priority {
 	// +/
 }
 
-alias UnusedExtentHeap = Heap!(Extent, unusedExtentCmp);
+alias UnusedExtentHeap = Heap!(Extent, unusedGenerationalCmp!Extent);
+alias UnusedExtentImmortalHeap =
+	Heap!(ExtentImmortal, unusedGenerationalCmp!ExtentImmortal);
 
-ptrdiff_t unusedExtentCmp(Extent* lhs, Extent* rhs) {
+ptrdiff_t unusedGenerationalCmp(E)(E* lhs, E* rhs) {
 	static assert(LgAddressSpace <= 56, "Address space too large!");
 
 	auto l = ulong(lhs.generation) << 56;
@@ -832,5 +855,38 @@ unittest batchAllocate {
 
 	foreach (i; 255 .. 500) {
 		assert((i + 2) * PointerSize == cast(size_t) buffer[i]);
+	}
+}
+
+struct ExtentImmortal {
+	Bitmap!512 immortalBits;
+	ubyte generation;
+	Node!ExtentImmortal phnode;
+	uint arenaIndex;
+	void forget(uint idx) {
+		immortalBits.clearBit(idx);
+	}
+
+	static fromSlot(uint arenaIndex, GenerationPointer slot) {
+		// FIXME: in contract
+		assert((arenaIndex & ~ArenaMask) == 0, "Invalid arena index!");
+		assert(slot.address !is null, "Slot is empty!");
+		assert(isAligned(slot.address, ExtentAlign), "Invalid slot alignment!");
+
+		auto i = cast(ExtentImmortal*) slot.address;
+		i.arenaIndex = arenaIndex;
+		i.generation = slot.generation;
+
+		return i;
+	}
+
+	this(uint arenaIndex, ubyte generation) {
+		this.arenaIndex = arenaIndex;
+		this.generation = generation;
+	}
+
+	ExtentImmortal* at() {
+		this = ExtentImmortal(arenaIndex, generation);
+		return &this;
 	}
 }

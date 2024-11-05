@@ -366,4 +366,103 @@ private:
 	}
 }
 
+extern(C) void printAndResetImmortals() {
+	// ignore any locks, we are printing this from a separate process, or
+	// from inside the GC with all threads suspended.
+	import d.gc.global;
+	import core.stdc.stdio;
+	import d.gc.range;
+	import d.gc.spec;
+
+	auto cycle = gState.cycle.load();
+	import d.gc.emap;
+	printf("GC cycle: %d, rtree nodes at: %p\n", cast(uint) cycle,
+	       gExtentMap.tree.nodes.ptr);
+
+	import d.gc.hooks;
+
+	auto emap = &threadCache.emap;
+
+	// now print all the allocated blocks
+	import d.gc.arena;
+	import d.gc.block;
+	void processBlocks(ref AllBlockRing blocks) {
+		import core.stdc.unistd;
+		for (auto r = blocks.range; !r.empty; r.popFront()) {
+			auto block = r.front;
+			auto bem = emap.blockLookup(block.address);
+			uint i = 0;
+			while (i < PagesInBlock) {
+				i = block.nextAllocatedPage(i);
+				if (i >= PagesInBlock) {
+					break;
+				}
+
+				auto pd = bem.lookup(i);
+				auto e = pd.extent;
+				if (e is null) {
+					// probably GC metadata
+					++i;
+					continue;
+				}
+
+				auto npages = e.npages;
+				scope(success) i += npages;
+				if (e.isSlab()) {
+					auto ec = pd.extentClass;
+					auto sc = ec.sizeClass;
+
+					import d.gc.sizeclass;
+					ulong* bmp;
+					if (ec.dense) {
+						if (e.immortals)
+							bmp = cast(ulong*) &e.immortals.immortalBits;
+					} else {
+						bmp = &e.immortalBits;
+					}
+
+					if (bmp is null)
+						continue;
+
+					import d.gc.slab;
+					int slotSize = binInfos[sc].slotSize;
+					foreach (idx; 0 .. e.nslots) {
+						if (bmp[idx / 64] >> (idx % 64)) {
+							auto addr = e.address + idx * slotSize;
+							printf("Immortal: S%d:%p\n", slotSize, addr);
+						}
+					}
+				} else {
+					import d.gc.util;
+					i += modUp(e.npages, PointerInPage);
+					if (e.immortalBits) {
+						auto addr = e.address;
+						auto size = e.size;
+						printf("Immortal: L%d:%p\n", size, addr);
+					}
+				}
+			}
+		}
+	}
+
+	foreach (uint aidx; 0 .. ArenaCount) {
+		auto arena = Arena.getIfInitialized(aidx);
+		if (arena is null)
+			continue;
+		auto cp = arena.containsPointers;
+		const char* isptr;
+		if (cp)
+			isptr = "ptr";
+		else
+			isptr = "noptr";
+		printf("Arena %d (%s):\n", aidx, isptr);
+		// print all immortal data.
+		processBlocks((cast(Arena*) arena).filler.denseBlocks);
+		processBlocks((cast(Arena*) arena).filler.sparseBlocks);
+
+		// track all immortals for next time
+		arena.filler.trackImmortals(*emap);
+	}
+}
+
 shared ThreadState gThreadState;

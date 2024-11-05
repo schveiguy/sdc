@@ -59,6 +59,7 @@ private:
 
 	UnusedExtentHeap unusedExtents;
 	UnusedBlockHeap unusedBlockDescriptors;
+	UnusedExtentImmortalHeap unusedExtentImmortals;
 
 	OutlinedBitmap* outlinedBitmaps;
 
@@ -276,6 +277,13 @@ public:
 		(cast(PageFiller*) &this).collectImpl(emap, gcCycle);
 	}
 
+	void trackImmortals(ref CachedExtentMap emap) shared {
+		mutex.lock();
+		scope(exit) mutex.unlock();
+
+		(cast(PageFiller*) &this).trackImmortalsImpl(emap);
+	}
+
 	/**
 	 * Usage stats.
 	 */
@@ -367,6 +375,10 @@ private:
 		}
 
 		usedPageCount.fetchSub(e.npages);
+		if (e.extentClass.dense && e.immortals !is null) {
+			unusedExtentImmortals.insert(e.immortals);
+		}
+
 		unusedExtents.insert(e);
 	}
 
@@ -646,6 +658,33 @@ private:
 		return unusedExtents.pop();
 	}
 
+	auto getOrAllocateExtentImmortal() {
+		assert(mutex.isHeld(), "Mutex not held!");
+
+		auto i = unusedExtentImmortals.pop();
+		if (i !is null) {
+			return i;
+		}
+
+		{
+			mutex.unlock();
+			scope(success) mutex.lock();
+
+			auto slot = base.allocSlot();
+			if (slot.address is null) {
+				goto Exit;
+			}
+
+			auto sharedThis = cast(shared(PageFiller)*) &this;
+			i = ExtentImmortal.fromSlot(sharedThis.arena.index, slot);
+		}
+
+		unusedExtentImmortals.insert(i);
+
+	Exit:
+		return unusedExtentImmortals.pop();
+	}
+
 	/**
 	 * GC facilities.
 	 */
@@ -757,6 +796,83 @@ private:
 		collectSparseAllocations(emap, slabs, gcCycle);
 
 		sharedThis.arena.combineBinsAfterCollection(collectedSlabs);
+	}
+
+	void trackImmortalsImpl(ref CachedExtentMap emap) {
+		// loop through all allocations, copy all "allocated" bits to the immortals bits.
+		trackDenseImmortals(emap);
+		trackSparseImmortals(emap);
+	}
+
+	void trackDenseImmortals(ref CachedExtentMap emap) {
+		for (auto r = denseBlocks.range; !r.empty; r.popFront()) {
+			auto block = r.front;
+			auto bem = emap.blockLookup(block.address);
+
+			uint i = 0;
+			while (i < PagesInBlock) {
+				i = block.nextAllocatedPage(i);
+				if (i >= PagesInBlock) {
+					break;
+				}
+
+				auto pd = bem.lookup(i);
+				auto e = pd.extent;
+				assert(e !is null);
+				assert(e.isSlab());
+
+				auto ec = pd.extentClass;
+				auto sc = ec.sizeClass;
+
+				assert(ec.dense);
+
+				auto npages = e.npages;
+				i += npages;
+
+				import d.gc.slab;
+				if (e.immortals is null) {
+					auto imm = getOrAllocateExtentImmortal();
+					assert(imm !is null);
+					e.immortals = imm.at();
+				}
+
+				e.immortals.immortalBits = e.slabData;
+			}
+		}
+	}
+
+	void trackSparseImmortals(ref CachedExtentMap emap) {
+		for (auto r = sparseBlocks.range; !r.empty; r.popFront()) {
+			auto block = r.front;
+			auto bem = emap.blockLookup(block.address);
+
+			uint i = 0;
+			while (i < PagesInBlock) {
+				i = block.nextAllocatedPage(i);
+				if (i >= PagesInBlock) {
+					break;
+				}
+
+				auto pd = bem.lookup(i);
+				auto e = pd.extent;
+				assert(e !is null, "GC Metadata leftovers?");
+
+				auto npages = e.npages;
+				scope(success) i += npages;
+
+				auto w = e.gcWord.load();
+				auto ec = pd.extentClass;
+				if (ec.isLarge()) {
+					// Make sure we handle huge extents correctly.
+					npages = modUp(npages, PagesInBlock);
+
+					e.immortalBits = 1;
+					continue;
+				}
+
+				e.immortalBits = e.slabData.rawContent[0];
+			}
+		}
 	}
 
 	/**

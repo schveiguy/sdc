@@ -7,6 +7,8 @@ import d.gc.tcache;
 import d.gc.time;
 import d.gc.util;
 
+extern(C) int dup(int oldfd);
+
 struct Collector {
 	ThreadCache* treadCache;
 
@@ -82,6 +84,36 @@ private:
 		 * phase.
 		 */
 		gState.minimizeRoots();
+
+		import core.stdc.stdio;
+		printf("Ran GC cycle %d\n", cast(int) gcCycle);
+		// print immortals every 16 cycles
+		if ((gcCycle & 0x1f) == 1) {
+			// park stdout, open a file to spit out the latest GC
+			// data. then at the end, put stdout back into place.
+			import core.stdc.fcntl;
+			import core.stdc.unistd;
+			char[128] buf;
+			auto len = snprintf(buf.ptr, buf.length, "gcstate%d.txt",
+			                    gCollectorState.getPrintoutCount());
+			auto realstdout = dup(1); // save for later
+			close(1);
+			auto outfd = creat(buf.ptr, 0x1a4);
+			assert(outfd == 1);
+			scope(exit) {
+				close(1);
+				auto origstdout = dup(
+					realstdout); // put the real stdout back where it belongs
+				assert(origstdout == 1);
+				close(realstdout);
+				auto msg = "Finished writing GC state ";
+				write(1, msg.ptr, msg.length);
+				buf[len++] = '\n';
+				write(1, buf.ptr, len);
+			}
+
+			printAndResetImmortals();
+		}
 	}
 
 	void prepareGCCycle() {
@@ -122,6 +154,8 @@ struct CollectorState {
 private:
 	import d.sync.mutex;
 	Mutex mutex;
+
+	int lastGCPrintout;
 
 	// This makes for a 32MB default target.
 	enum DefaultHeapSize = 32 * 1024 * 1024 / PageSize;
@@ -240,6 +274,11 @@ private:
 
 		lastTargetAdjustement = lastCollectionStop;
 		nextTarget = max(target, minHeapSize);
+	}
+
+	int getPrintoutCount() shared {
+		assert(mutex.isHeld());
+		return ++(*cast(int*) &lastGCPrintout);
 	}
 }
 
