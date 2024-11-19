@@ -406,9 +406,8 @@ extern(C) void printAndResetImmortals() {
 					continue;
 				}
 
-				auto npages = e.npages;
-				scope(success) i += npages;
 				if (e.isSlab()) {
+					i += e.npages;
 					auto ec = pd.extentClass;
 					auto sc = ec.sizeClass;
 

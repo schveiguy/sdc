@@ -986,7 +986,13 @@ private:
 					auto evicted = oldOccupancy ^ newOccupancy;
 					count += popCount(evicted);
 
-					scope(success) e.slabData.rawContent[i] = newOccupancy;
+					scope(success){
+						e.slabData.rawContent[i] = newOccupancy;
+						auto immortals = e.immortals;
+						if(immortals !is null) {
+							immortals.immortalBits.rawContent[i] &= newOccupancy;
+						}
+					}
 
 					if (!ec.supportsMetadata) {
 						continue;
@@ -1103,6 +1109,7 @@ private:
 				auto count = popCount(evicted);
 
 				e.slabData.rawContent[0] = newOccupancy;
+				e.immortalBits &= newOccupancy;
 				e.bits += count * Extent.FreeSlotsUnit;
 
 				if (e.nfree > 0) {
