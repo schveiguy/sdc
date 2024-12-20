@@ -855,7 +855,11 @@ private:
 
 				auto pd = bem.lookup(i);
 				auto e = pd.extent;
-				assert(e !is null, "GC Metadata leftovers?");
+				if (e is null) {
+					// GC metadata, skip.
+					++i;
+					continue;
+				}
 
 				auto npages = e.npages;
 				scope(success) i += npages;
@@ -986,11 +990,12 @@ private:
 					auto evicted = oldOccupancy ^ newOccupancy;
 					count += popCount(evicted);
 
-					scope(success){
+					scope(success) {
 						e.slabData.rawContent[i] = newOccupancy;
 						auto immortals = e.immortals;
-						if(immortals !is null) {
-							immortals.immortalBits.rawContent[i] &= newOccupancy;
+						if (immortals !is null) {
+							immortals.immortalBits.rawContent[i] &=
+								newOccupancy;
 						}
 					}
 

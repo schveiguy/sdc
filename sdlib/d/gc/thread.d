@@ -379,14 +379,12 @@ extern(C) void printAndResetImmortals() {
 	printf("GC cycle: %d, rtree nodes at: %p\n", cast(uint) cycle,
 	       gExtentMap.tree.nodes.ptr);
 
-	import d.gc.hooks;
-
 	auto emap = &threadCache.emap;
 
 	// now print all the allocated blocks
 	import d.gc.arena;
 	import d.gc.block;
-	void processBlocks(ref AllBlockRing blocks) {
+	static void processBlocks(ref AllBlockRing blocks) {
 		import core.stdc.unistd;
 		for (auto r = blocks.range; !r.empty; r.popFront()) {
 			auto block = r.front;
