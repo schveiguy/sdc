@@ -51,17 +51,36 @@ public:
 	}
 
 	void mark() shared {
+		// Need to save the registers of this thread on the stack, so
+		// the scanning of it is the same as all other threads that are
+		// suspended.
+		import d.gc.stack;
+		__sd_gc_push_registers(markImpl);
+	}
+
+	void markImpl() shared {
 		import core.stdc.pthread;
 		auto threadCount = activeThreads - 1;
 		auto threadsPtr =
 			cast(pthread_t*) alloca(pthread_t.sizeof * threadCount);
 		auto threads = threadsPtr[0 .. threadCount];
 
+		// Record the info that would normally be stored by the signal handler.
+		import sdc.intrinsics;
+		auto stackTop = readFramePointer();
+
+		import d.gc.tcache;
+		threadCache.stackTop = stackTop;
+		scope(exit) threadCache.stackTop = null;
+
+		import d.gc.hooks;
+		__sd_gc_pre_suspend_hook(stackTop);
+		scope(exit) __sd_gc_post_suspend_hook();
+
 		static void* markThreadEntry(void* ctx) {
-			import d.gc.tcache;
 			threadCache.activateGC(false);
 
-			(cast(shared(Scanner*)) ctx).runMark();
+			(cast(shared(Scanner*)) ctx).runMark(false);
 			return null;
 		}
 
@@ -74,10 +93,9 @@ public:
 		__sd_gc_global_scan(addToWorkList);
 
 		// Now send this thread marking!
-		runMark();
+		runMark(true);
 
 		// We now done, we can free the worklist.
-		import d.gc.tcache;
 		threadCache.free(cast(void*) worklist.ptr);
 
 		foreach (tid; threads) {
@@ -118,7 +136,7 @@ public:
 	}
 
 private:
-	void runMark() shared {
+	void runMark(bool skipThreadScan) shared {
 		auto worker = Worker(&this);
 
 		/**
@@ -136,7 +154,12 @@ private:
 		 * This is NOT good! So we scan here to make sure we don't miss anything.
 		 */
 		import d.gc.thread;
-		threadScan(worker.scan);
+		// only scan the stack if this isn't the main thread. The main
+		// thread's TLS and stack are scanned via the global scan
+		// mechanism.
+		if (!skipThreadScan) {
+			threadScan(worker.scan);
+		}
 
 		WorkItem[MaxRefill] refill;
 		while (true) {
